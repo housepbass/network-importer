@@ -316,8 +316,12 @@ class NautobotIPAddress(IPAddress):
         Returns:
             NautobotIPAddress: DiffSync object
         """
+        # Find correct interface from list of interfaces based on device name
+        intf_name = ''.join(intf.name for intf in obj.interfaces if intf.device.name == device_name)
+
         item = cls(
-            address=obj.address, device_name=device_name, interface_name=obj.assigned_object.name, remote_id=obj.id
+            # address=obj.address, device_name=device_name, interface_name=obj.assigned_object.name, remote_id=obj.id
+            address=obj.address, device_name=device_name, interface_name=intf_name, remote_id=obj.id
         )
 
         item = diffsync.apply_model_flag(item, obj)

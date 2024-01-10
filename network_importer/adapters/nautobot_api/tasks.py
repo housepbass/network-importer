@@ -55,6 +55,10 @@ def query_device_info_from_nautobot(task: Task) -> Result:
 
     results["device"] = dict(device[0])
 
+    # Add data necessary for Nautobot 2.0 as dict() method doesn't include object names
+    results['device']['location']['name'] = device[0].location.name
+    results['device']['primary_ip4']['address'] = device[0].primary_ip4.address
+    
     # TODO move the logic to pull the interface and potentially IP here
     # interfaces = netbox.dcim.interfaces.filter(device=task.host.name)
     # results["interfaces"] = [ dict(intf) for intf in interfaces ]
