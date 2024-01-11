@@ -78,6 +78,7 @@ class Interface(DiffSyncModel):  # pylint: disable=too-many-instance-attributes
 
     name: str
     device_name: str
+    status: str = "Active"
 
     description: Optional[str]
     mtu: Optional[int]
