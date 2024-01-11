@@ -141,6 +141,7 @@ class NetworkImporterAdapter(BaseAdapter):
 
         intfs = self.bfi.q.interfaceProperties(nodes=f'"{device.name}"').answer().frame()
         for _, intf in intfs.iterrows():
+            # breakpoint()
             self.load_batfish_interface(
                 site=site,
                 device=device,
@@ -258,7 +259,7 @@ class NetworkImporterAdapter(BaseAdapter):
 
         self.add(interface)
         device.add_child(interface)
-
+        
         if "All_Prefixes" not in intf:
             return interface
 
@@ -266,7 +267,7 @@ class NetworkImporterAdapter(BaseAdapter):
             self.load_batfish_ip_address(
                 site=site, device=device, interface=interface, address=prefix, interface_vlans=interface_vlans
             )
-
+        # breakpoint()
         return interface
 
     def load_batfish_ip_address(

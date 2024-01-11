@@ -50,7 +50,8 @@ class NautobotDevice(Device):
         tag = self.diffsync.nautobot.extras.tags.get(name=f"device={self.name}")
         if not tag:
             tag = self.diffsync.nautobot.extras.tags.create(
-                name=f"device={self.name}", slug=f"device__{''.join(c if c.isalnum() else '_' for c in self.name)}"
+                name=f"device={self.name}",
+                content_types=['ipam.vlan'],
             )
 
         self.device_tag_id = tag.id
@@ -67,7 +68,7 @@ class NautobotInterface(Interface):
         """Translate interface attributes into Nautobot format.
 
         Args:
-            params (dict): Dictionnary of attributes of the object to translate
+            params (dict): Dictionary of attributes of the object to translate
 
         Returns:
             dict: Nautobot parameters
@@ -176,6 +177,7 @@ class NautobotInterface(Interface):
         item = super().create(ids=ids, diffsync=diffsync, attrs=attrs)
 
         try:
+            # breakpoint()
             nb_params = item.translate_attrs_for_nautobot(attrs)
             intf = diffsync.nautobot.dcim.interfaces.create(**nb_params)
             LOGGER.info("Created interface %s (%s) in Nautobot", intf.name, intf.id)
@@ -339,7 +341,7 @@ class NautobotIPAddress(IPAddress):
             item = super().create(ids=ids, diffsync=diffsync, attrs=attrs)
             nb_params = item.translate_attrs_for_nautobot(attrs)
             # Add status because it's a mandatory field.
-            nb_params["status"] = "active"
+            nb_params["status"] = "Active"
             ip_address = diffsync.nautobot.ipam.ip_addresses.create(**nb_params)
         except pynautobot.core.query.RequestError as exc:
             LOGGER.warning("Unable to create the ip address %s in %s (%s)", ids["address"], diffsync.name, exc.error)
@@ -507,7 +509,7 @@ class NautobotVlan(Vlan):
             nb_params["name"] = f"vlan-{self.vid}"
 
         site = self.diffsync.get(self.diffsync.site, identifier=self.site_name)
-        nb_params["site"] = site.remote_id
+        nb_params["location"] = site.remote_id
 
         # Add Status
         nb_params["status"] = "Active"
@@ -552,10 +554,13 @@ class NautobotVlan(Vlan):
         # Check the existing tags to learn which device is already associated with this vlan
         # Exclude all devices that are not part of the inventory
         for tag in obj.tags:
+            # Print is ecessary to load the tag object... I think this is a bug
+            print(tag)
             if item.tag_prefix not in tag["name"]:
                 continue
-
+            
             device_name = tag["name"].split(item.tag_prefix)[1]
+
             try:
                 device = diffsync.get(diffsync.device, identifier=device_name)
             except ObjectNotFound:
