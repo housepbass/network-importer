@@ -301,8 +301,10 @@ class NautobotIPAddress(IPAddress):
                 self.diffsync.interface,
                 identifier=dict(device_name=self.device_name, name=self.interface_name),
             )
-            nb_params["assigned_object_type"] = "dcim.interface"
+            # nb_params["assigned_object_type"] = "dcim.interface"
             nb_params["assigned_object_id"] = interface.remote_id
+
+
         except ObjectNotFound:
             pass
 
@@ -340,16 +342,30 @@ class NautobotIPAddress(IPAddress):
         try:
             item = super().create(ids=ids, diffsync=diffsync, attrs=attrs)
             nb_params = item.translate_attrs_for_nautobot(attrs)
-            # Add status because it's a mandatory field.
+            # Add status and namespace because they're mandatory fields.
             nb_params["status"] = "Active"
-            ip_address = diffsync.nautobot.ipam.ip_addresses.create(**nb_params)
+            nb_params["namespace"] = "Global"
+
+            # TODO Add try/except for condition where no suitable parent prefix exists for IP?
+            ip_address = diffsync.nautobot.ipam.ip_addresses.create(
+                address = nb_params["address"],
+                status = nb_params["status"],
+                namespace = nb_params["namespace"]
+            )
+            
+            # Create relationship betwen IP and Interface
+            _ = diffsync.nautobot.ipam.ip_address_to_interface.create(
+                ip_address = ip_address.id,
+                interface = nb_params["assigned_object_id"]
+            )
+
         except pynautobot.core.query.RequestError as exc:
             LOGGER.warning("Unable to create the ip address %s in %s (%s)", ids["address"], diffsync.name, exc.error)
             return None
 
         LOGGER.info("Created IP %s (%s) in Nautobot", ip_address.address, ip_address.id)
         item.remote_id = ip_address.id
-
+        
         return item
 
     def delete(self) -> Optional["DiffSyncModel"]:
@@ -414,10 +430,10 @@ class NautobotPrefix(Prefix):
         Returns:
             dict: Nautobot parameters
         """
-        nb_params = {"prefix": self.prefix, "status": "active"}
+        nb_params = {"prefix": self.prefix, "status": "Active"}
 
         site = self.diffsync.get(self.diffsync.site, identifier=self.site_name)
-        nb_params["site"] = site.remote_id
+        nb_params["location"] = site.remote_id
 
         if "vlan" in attrs and attrs["vlan"]:
             try:
@@ -554,7 +570,7 @@ class NautobotVlan(Vlan):
         # Check the existing tags to learn which device is already associated with this vlan
         # Exclude all devices that are not part of the inventory
         for tag in obj.tags:
-            # Print is ecessary to load the tag object... I think this is a bug
+            # TODO Convert to getter
             print(tag)
             if item.tag_prefix not in tag["name"]:
                 continue
@@ -603,6 +619,8 @@ class NautobotVlan(Vlan):
         # to ensure that we won't delete an existing tags
         if "tags" in nb_params and nb_params["tags"] and obj.tags:
             for tag in obj.tags:
+                # TODO Convert to getter
+                print(tag)
                 if self.tag_prefix not in tag["name"]:
                     nb_params["tags"].append(tag["id"])
                 else:

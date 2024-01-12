@@ -356,7 +356,8 @@ class NautobotAPIAdapter(BaseAdapter):
         for nb_cable in cables:
             if nb_cable.termination_a_type != "dcim.interface" or nb_cable.termination_b_type != "dcim.interface":
                 continue
-            # Device objects don't load unless the termination endpoints are called first
+            # Device objects don't load unless the termination endpoints are called first.
+            # Convert to using getters
             print(nb_cable.termination_a)
             print(nb_cable.termination_b)
 
