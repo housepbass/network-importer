@@ -92,13 +92,15 @@ class NetworkImporterAdapter(BaseAdapter):
 
         try:
             self.bfi = Session.get("bf", **bf_params)
+            # self.bfi.set_snapshot()
             self.bfi.verify = False
             self.bfi.set_network(network_name)
             self.bfi.init_snapshot(snapshot_path, name=snapshot_name, overwrite=True)
         except BatfishException as exc:
-            error = json.loads(str(exc).splitlines()[-1])
-            error = re.sub(r"[^:]*:.", "", error["answerElements"][0]["answer"][0])
-            raise AdapterLoadFatalError(error) from exc
+            print(exc)
+            # error = json.loads(str(exc).splitlines()[-1])
+            # error = re.sub(r"[^:]*:.", "", error["answerElements"][0]["answer"][0])
+            # raise AdapterLoadFatalError(error) from exc
 
     def load_batfish(self):
         """Load all devices, interfaces and IP Addresses from Batfish."""
@@ -139,6 +141,7 @@ class NetworkImporterAdapter(BaseAdapter):
 
         intfs = self.bfi.q.interfaceProperties(nodes=f'"{device.name}"').answer().frame()
         for _, intf in intfs.iterrows():
+            # breakpoint()
             self.load_batfish_interface(
                 site=site,
                 device=device,
@@ -256,7 +259,7 @@ class NetworkImporterAdapter(BaseAdapter):
 
         self.add(interface)
         device.add_child(interface)
-
+        
         if "All_Prefixes" not in intf:
             return interface
 
@@ -264,7 +267,7 @@ class NetworkImporterAdapter(BaseAdapter):
             self.load_batfish_ip_address(
                 site=site, device=device, interface=interface, address=prefix, interface_vlans=interface_vlans
             )
-
+        # breakpoint()
         return interface
 
     def load_batfish_ip_address(

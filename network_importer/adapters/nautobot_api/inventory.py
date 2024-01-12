@@ -51,8 +51,8 @@ class NautobotAPIInventory(NetworkImporterInventory):
             else:
                 build_filter_params(self.limit.split((",")), self.filter_parameters)
 
-        if "exclude" not in self.filter_parameters:
-            self.filter_parameters["exclude"] = "config_context"
+        # if "exclude" not in self.filter_parameters:
+        #     self.filter_parameters["exclude"] = "config_context"
 
         # Instantiate nautobot session using pynautobot
         self.session = pynautobot.api(url=self.settings.address, token=self.settings.token)
@@ -68,7 +68,7 @@ class NautobotAPIInventory(NetworkImporterInventory):
 
         # fetch all platforms from nautobot and build mapping:   platform:  napalm_driver
         platforms = self.session.dcim.platforms.all()
-        platforms_mapping = {platform.slug: platform.napalm_driver for platform in platforms if platform.napalm_driver}
+        platforms_mapping = {platform.name: platform.napalm_driver for platform in platforms if platform.napalm_driver}
 
         hosts = Hosts()
         groups = Groups()
@@ -96,13 +96,13 @@ class NautobotAPIInventory(NetworkImporterInventory):
                 if not dev.platform:
                     continue
 
-                if dev.platform.slug not in self.supported_platforms:
+                if dev.platform.name not in self.supported_platforms:
                     continue
 
             # Add value for IP address
-            if self.settings.use_primary_ip and dev.primary_ip:
-                host.hostname = dev.primary_ip.address.split("/")[0]
-            elif self.settings.use_primary_ip and not dev.primary_ip:
+            if self.settings.use_primary_ip and dev.primary_ip4:
+                host.hostname = dev.primary_ip4.address.split("/")[0]
+            elif self.settings.use_primary_ip and not dev.primary_ip4:
                 host.is_reachable = False
                 host.not_reachable_reason = "primary ip not defined in nautobot"
             elif not self.settings.use_primary_ip and self.settings.fqdn:
@@ -112,33 +112,33 @@ class NautobotAPIInventory(NetworkImporterInventory):
             else:
                 host.hostname = dev_name
 
-            host.site_name = dev.site.slug
+            host.site_name = dev.location.name
 
             host.data["serial"] = dev.serial
-            host.data["vendor"] = dev.device_type.manufacturer.slug
+            host.data["vendor"] = dev.device_type.manufacturer.name
             host.data["asset_tag"] = dev.asset_tag
             host.data["custom_fields"] = dev.custom_fields
-            host.data["site_id"] = dev.site.id
+            host.data["site_id"] = dev.location.id
             host.data["device_id"] = dev.id
-            host.data["role"] = dev.device_role.slug
-            host.data["model"] = dev.device_type.slug
+            host.data["role"] = dev.role.name
+            host.data["model"] = dev.device_type.model
 
             # Attempt to add 'platform' based of value in 'slug'
-            if dev.platform and dev.platform.slug in platforms_mapping:
-                host.connection_options = {"napalm": ConnectionOptions(platform=platforms_mapping[dev.platform.slug])}
+            if dev.platform and dev.platform.name in platforms_mapping:
+                host.connection_options = {"napalm": ConnectionOptions(platform=platforms_mapping[dev.platform.name])}
 
             if dev.platform:
-                host.platform = dev.platform.slug
+                host.platform = dev.platform.name
             else:
                 host.platform = None
 
             host.groups = ParentGroups([self.global_group])
 
-            if dev.site.slug not in groups.keys():
-                groups[dev.site.slug] = {}
+            if dev.location.name not in groups.keys():
+                groups[dev.location.name] = {}
 
-            if dev.device_role.slug not in groups.keys():
-                groups[dev.device_role.slug] = {}
+            if dev.role.name not in groups.keys():
+                groups[dev.role.name] = {}
 
             if host.hostname and host.platform:
                 host.is_reachable = True

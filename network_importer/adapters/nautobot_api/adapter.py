@@ -121,10 +121,10 @@ class NautobotAPIAdapter(BaseAdapter):
 
             result = items[0].result
             nb_device = result["device"]
-            site_name = nb_device["site"].get("slug")
+            site_name = nb_device["location"].get("name")
 
             if site_name not in sites:
-                site = self.site(name=site_name, remote_id=nb_device["site"].get("id"))
+                site = self.site(name=site_name, remote_id=nb_device["location"].get("id"))
                 sites[site_name] = site
                 self.add(site)
             else:
@@ -132,8 +132,8 @@ class NautobotAPIAdapter(BaseAdapter):
 
             device = self.device(name=device_name, site_name=site_name, remote_id=nb_device["id"])
 
-            if nb_device["primary_ip"]:
-                device.primary_ip = nb_device["primary_ip"].get("address")
+            if nb_device["primary_ip4"]:
+                device.primary_ip = nb_device["primary_ip4"].get("address")
 
             device = self.apply_model_flag(device, nb_device)
             self.add(device)
@@ -173,7 +173,7 @@ class NautobotAPIAdapter(BaseAdapter):
         if not config.SETTINGS.main.import_prefixes:
             return
 
-        prefixes = self.nautobot.ipam.prefixes.filter(site=site.name, status="active")
+        prefixes = self.nautobot.ipam.prefixes.filter(location=site.name, status="Active")
 
         for nb_prefix in prefixes:
             prefix = self.prefix(
@@ -198,7 +198,7 @@ class NautobotAPIAdapter(BaseAdapter):
         if config.SETTINGS.main.import_vlans in [False, "no"]:
             return
 
-        vlans = self.nautobot.ipam.vlans.filter(site=site.name)
+        vlans = self.nautobot.ipam.vlans.filter(location=site.name)
 
         for nb_vlan in vlans:
             vlan = self.vlan.create_from_pynautobot(diffsync=self, obj=nb_vlan, site_name=site.name)
@@ -350,12 +350,16 @@ class NautobotAPIAdapter(BaseAdapter):
             site (Site): Site object to import cables for
             device_names (list): List of device names that are part of the inventory
         """
-        cables = self.nautobot.dcim.cables.filter(site=site.name)
+        cables = self.nautobot.dcim.cables.filter(location=site.name)
 
         nbr_cables = 0
         for nb_cable in cables:
             if nb_cable.termination_a_type != "dcim.interface" or nb_cable.termination_b_type != "dcim.interface":
                 continue
+            # Device objects don't load unless the termination endpoints are called first.
+            # Convert to using getters
+            print(nb_cable.termination_a)
+            print(nb_cable.termination_b)
 
             if (nb_cable.termination_a.device.name not in device_names) and (
                 nb_cable.termination_b.device.name not in device_names

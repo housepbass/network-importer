@@ -50,7 +50,8 @@ class NautobotDevice(Device):
         tag = self.diffsync.nautobot.extras.tags.get(name=f"device={self.name}")
         if not tag:
             tag = self.diffsync.nautobot.extras.tags.create(
-                name=f"device={self.name}", slug=f"device__{''.join(c if c.isalnum() else '_' for c in self.name)}"
+                name=f"device={self.name}",
+                content_types=['ipam.vlan'],
             )
 
         self.device_tag_id = tag.id
@@ -67,7 +68,7 @@ class NautobotInterface(Interface):
         """Translate interface attributes into Nautobot format.
 
         Args:
-            params (dict): Dictionnary of attributes of the object to translate
+            params (dict): Dictionary of attributes of the object to translate
 
         Returns:
             dict: Nautobot parameters
@@ -106,6 +107,7 @@ class NautobotInterface(Interface):
 
         nb_params["device"] = device.remote_id
         nb_params["name"] = self.name
+        nb_params["status"] = self.status
 
         if "is_lag" in attrs and attrs["is_lag"]:
             nb_params["type"] = "lag"
@@ -175,6 +177,7 @@ class NautobotInterface(Interface):
         item = super().create(ids=ids, diffsync=diffsync, attrs=attrs)
 
         try:
+            # breakpoint()
             nb_params = item.translate_attrs_for_nautobot(attrs)
             intf = diffsync.nautobot.dcim.interfaces.create(**nb_params)
             LOGGER.info("Created interface %s (%s) in Nautobot", intf.name, intf.id)
@@ -298,8 +301,10 @@ class NautobotIPAddress(IPAddress):
                 self.diffsync.interface,
                 identifier=dict(device_name=self.device_name, name=self.interface_name),
             )
-            nb_params["assigned_object_type"] = "dcim.interface"
+            # nb_params["assigned_object_type"] = "dcim.interface"
             nb_params["assigned_object_id"] = interface.remote_id
+
+
         except ObjectNotFound:
             pass
 
@@ -316,8 +321,12 @@ class NautobotIPAddress(IPAddress):
         Returns:
             NautobotIPAddress: DiffSync object
         """
+        # Find correct interface from list of interfaces based on device name
+        intf_name = ''.join(intf.name for intf in obj.interfaces if intf.device.name == device_name)
+
         item = cls(
-            address=obj.address, device_name=device_name, interface_name=obj.assigned_object.name, remote_id=obj.id
+            # address=obj.address, device_name=device_name, interface_name=obj.assigned_object.name, remote_id=obj.id
+            address=obj.address, device_name=device_name, interface_name=intf_name, remote_id=obj.id
         )
 
         item = diffsync.apply_model_flag(item, obj)
@@ -333,16 +342,30 @@ class NautobotIPAddress(IPAddress):
         try:
             item = super().create(ids=ids, diffsync=diffsync, attrs=attrs)
             nb_params = item.translate_attrs_for_nautobot(attrs)
-            # Add status because it's a mandatory field.
-            nb_params["status"] = "active"
-            ip_address = diffsync.nautobot.ipam.ip_addresses.create(**nb_params)
+            # Add status and namespace because they're mandatory fields.
+            nb_params["status"] = "Active"
+            nb_params["namespace"] = "Global"
+
+            # TODO Add try/except for condition where no suitable parent prefix exists for IP?
+            ip_address = diffsync.nautobot.ipam.ip_addresses.create(
+                address = nb_params["address"],
+                status = nb_params["status"],
+                namespace = nb_params["namespace"]
+            )
+            
+            # Create relationship betwen IP and Interface
+            _ = diffsync.nautobot.ipam.ip_address_to_interface.create(
+                ip_address = ip_address.id,
+                interface = nb_params["assigned_object_id"]
+            )
+
         except pynautobot.core.query.RequestError as exc:
             LOGGER.warning("Unable to create the ip address %s in %s (%s)", ids["address"], diffsync.name, exc.error)
             return None
 
         LOGGER.info("Created IP %s (%s) in Nautobot", ip_address.address, ip_address.id)
         item.remote_id = ip_address.id
-
+        
         return item
 
     def delete(self) -> Optional["DiffSyncModel"]:
@@ -407,10 +430,10 @@ class NautobotPrefix(Prefix):
         Returns:
             dict: Nautobot parameters
         """
-        nb_params = {"prefix": self.prefix, "status": "active"}
+        nb_params = {"prefix": self.prefix, "status": "Active"}
 
         site = self.diffsync.get(self.diffsync.site, identifier=self.site_name)
-        nb_params["site"] = site.remote_id
+        nb_params["location"] = site.remote_id
 
         if "vlan" in attrs and attrs["vlan"]:
             try:
@@ -502,7 +525,7 @@ class NautobotVlan(Vlan):
             nb_params["name"] = f"vlan-{self.vid}"
 
         site = self.diffsync.get(self.diffsync.site, identifier=self.site_name)
-        nb_params["site"] = site.remote_id
+        nb_params["location"] = site.remote_id
 
         # Add Status
         nb_params["status"] = "Active"
@@ -547,10 +570,13 @@ class NautobotVlan(Vlan):
         # Check the existing tags to learn which device is already associated with this vlan
         # Exclude all devices that are not part of the inventory
         for tag in obj.tags:
+            # TODO Convert to getter
+            print(tag)
             if item.tag_prefix not in tag["name"]:
                 continue
-
+            
             device_name = tag["name"].split(item.tag_prefix)[1]
+
             try:
                 device = diffsync.get(diffsync.device, identifier=device_name)
             except ObjectNotFound:
@@ -593,6 +619,8 @@ class NautobotVlan(Vlan):
         # to ensure that we won't delete an existing tags
         if "tags" in nb_params and nb_params["tags"] and obj.tags:
             for tag in obj.tags:
+                # TODO Convert to getter
+                print(tag)
                 if self.tag_prefix not in tag["name"]:
                     nb_params["tags"].append(tag["id"])
                 else:
@@ -702,7 +730,7 @@ class NautobotCable(Cable):
                 termination_b_type="dcim.interface",
                 termination_a_id=interface_a.remote_id,
                 termination_b_id=interface_z.remote_id,
-                status="connected",
+                status="Connected",
             )
         except pynautobot.core.query.RequestError as exc:
             LOGGER.warning("Unable to create Cable %s in %s (%s)", ids, diffsync.name, exc.error)
